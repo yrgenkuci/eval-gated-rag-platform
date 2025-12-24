@@ -1,0 +1,94 @@
+name: Eval Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "data/gold/**"
+      - ".github/workflows/eval-gate.yml"
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Evaluation thresholds (SLO)
+  EVAL_THRESHOLD: "0.85"
+  EVAL_GOLD_SET: "data/gold/test.json"
+
+jobs:
+  eval-gate:
+    name: Evaluation Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Check gold set exists
+        id: gold-set-check
+        run: |
+          if [ -f "${{ env.EVAL_GOLD_SET }}" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::warning::Gold set not found at ${{ env.EVAL_GOLD_SET }}, skipping evaluation"
+          fi
+
+      - name: Run evaluation
+        if: steps.gold-set-check.outputs.exists == 'true'
+        run: |
+          poetry run python -m scripts.run_eval \
+            --gold-set "${{ env.EVAL_GOLD_SET }}" \
+            --threshold "${{ env.EVAL_THRESHOLD }}" \
+            --output eval-results.json
+
+      - name: Check evaluation passed
+        if: steps.gold-set-check.outputs.exists == 'true'
+        run: |
+          if [ -f "eval-results.json" ]; then
+            PASS_RATE=$(python -c "import json; print(json.load(open('eval-results.json'))['summary']['pass_rate'])")
+            echo "Pass rate: $PASS_RATE"
+            python -c "
+          import json
+          import sys
+          results = json.load(open('eval-results.json'))
+          pass_rate = results['summary']['pass_rate']
+          threshold = float('${{ env.EVAL_THRESHOLD }}')
+          if pass_rate < threshold:
+              print(f'FAIL: Pass rate {pass_rate:.2%} below threshold {threshold:.2%}')
+              sys.exit(1)
+          print(f'PASS: Pass rate {pass_rate:.2%} meets threshold {threshold:.2%}')
+          "
+          fi
+
+      - name: Upload evaluation results
+        if: always() && steps.gold-set-check.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval-results.json
+          retention-days: 30
+
