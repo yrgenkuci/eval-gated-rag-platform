@@ -1,0 +1,124 @@
+{{- if and .Values.prometheus.enabled .Values.prometheus.alerting.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-prometheus-alerts
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  alerts.yml: |
+    groups:
+      - name: rag-platform
+        rules:
+          # High latency alert
+          - alert: HighRequestLatency
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > {{ .Values.prometheus.alerting.thresholds.latencyP95 }}
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High request latency detected"
+              description: "95th percentile request latency is above {{ .Values.prometheus.alerting.thresholds.latencyP95 }}s for 5 minutes."
+
+          # Very high latency - critical
+          - alert: CriticalRequestLatency
+            expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > {{ .Values.prometheus.alerting.thresholds.latencyP99 }}
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Critical request latency detected"
+              description: "99th percentile request latency is above {{ .Values.prometheus.alerting.thresholds.latencyP99 }}s for 2 minutes."
+
+          # High error rate
+          - alert: HighErrorRate
+            expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > {{ .Values.prometheus.alerting.thresholds.errorRate }}
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is above {{ .Values.prometheus.alerting.thresholds.errorRate | mul 100 }}% for 5 minutes."
+
+          # Critical error rate
+          - alert: CriticalErrorRate
+            expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > {{ .Values.prometheus.alerting.thresholds.errorRateCritical }}
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Critical error rate detected"
+              description: "Error rate is above {{ .Values.prometheus.alerting.thresholds.errorRateCritical | mul 100 }}% for 2 minutes."
+
+          # LLM service slow
+          - alert: LLMServiceSlow
+            expr: histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (le, model)) > {{ .Values.prometheus.alerting.thresholds.llmLatency }}
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "LLM service is slow"
+              description: "LLM 95th percentile latency is above {{ .Values.prometheus.alerting.thresholds.llmLatency }}s for 5 minutes."
+
+          # LLM service errors
+          - alert: LLMServiceErrors
+            expr: sum(rate(llm_requests_total{status="error"}[5m])) / sum(rate(llm_requests_total[5m])) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "LLM service errors detected"
+              description: "LLM error rate is above 10% for 5 minutes."
+
+          # Evaluation pass rate degradation
+          - alert: EvalPassRateDegraded
+            expr: eval_pass_rate < {{ .Values.prometheus.alerting.thresholds.evalPassRate }}
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Evaluation pass rate degraded"
+              description: "Evaluation pass rate is below {{ .Values.prometheus.alerting.thresholds.evalPassRate | mul 100 }}% for 10 minutes."
+
+          # Critical evaluation failure
+          - alert: EvalPassRateCritical
+            expr: eval_pass_rate < {{ .Values.prometheus.alerting.thresholds.evalPassRateCritical }}
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Critical evaluation pass rate"
+              description: "Evaluation pass rate is below {{ .Values.prometheus.alerting.thresholds.evalPassRateCritical | mul 100 }}% for 5 minutes. Consider rollback."
+
+          # Low retrieval scores
+          - alert: LowRetrievalScores
+            expr: histogram_quantile(0.50, sum(rate(retrieval_top_score_bucket[5m])) by (le)) < {{ .Values.prometheus.alerting.thresholds.retrievalScore }}
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Low retrieval relevance scores"
+              description: "Median retrieval score is below {{ .Values.prometheus.alerting.thresholds.retrievalScore }} for 10 minutes."
+
+          # Service down
+          - alert: RAGServiceDown
+            expr: up{job="rag-api"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "RAG API service is down"
+              description: "RAG API service has been unavailable for 1 minute."
+
+          # High token usage (cost control)
+          - alert: HighTokenUsage
+            expr: sum(increase(llm_tokens_total[1h])) > {{ .Values.prometheus.alerting.thresholds.tokensPerHour }}
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High LLM token usage"
+              description: "Token usage in the last hour exceeds {{ .Values.prometheus.alerting.thresholds.tokensPerHour }} tokens."
+{{- end }}
+

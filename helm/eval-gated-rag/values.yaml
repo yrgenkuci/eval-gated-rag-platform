@@ -210,6 +210,10 @@ grafana:
     enabled: true
     size: 5Gi
     storageClass: ""
+  
+  # Pre-configured dashboards
+  dashboards:
+    enabled: true
 
 # Prometheus Monitoring
 prometheus:
@@ -238,6 +242,26 @@ prometheus:
     enabled: true
     size: 10Gi
     storageClass: ""
+  
+  # Alerting configuration
+  alerting:
+    enabled: true
+    thresholds:
+      # Latency thresholds (seconds)
+      latencyP95: 2.0
+      latencyP99: 5.0
+      # Error rate thresholds (0-1)
+      errorRate: 0.05
+      errorRateCritical: 0.10
+      # LLM latency (seconds)
+      llmLatency: 30.0
+      # Evaluation pass rate (0-1)
+      evalPassRate: 0.85
+      evalPassRateCritical: 0.70
+      # Retrieval score threshold (0-1)
+      retrievalScore: 0.5
+      # Token usage per hour
+      tokensPerHour: 100000
 
 # Ingress configuration
 ingress:

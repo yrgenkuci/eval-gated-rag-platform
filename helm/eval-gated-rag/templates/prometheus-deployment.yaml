@@ -11,6 +11,11 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
+    {{- if .Values.prometheus.alerting.enabled }}
+
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    {{- end }}
 
     scrape_configs:
       - job_name: 'rag-api'
@@ -72,7 +77,13 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: config
-              mountPath: /etc/prometheus
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            {{- if .Values.prometheus.alerting.enabled }}
+            - name: alerts
+              mountPath: /etc/prometheus/alerts.yml
+              subPath: alerts.yml
+            {{- end }}
             - name: data
               mountPath: /prometheus
           resources:
@@ -93,6 +104,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "eval-gated-rag.fullname" . }}-prometheus-config
+        {{- if .Values.prometheus.alerting.enabled }}
+        - name: alerts
+          configMap:
+            name: {{ include "eval-gated-rag.fullname" . }}-prometheus-alerts
+        {{- end }}
         {{- if .Values.prometheus.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
