@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src import __version__
+from src.api.routes import router as rag_router
 from src.config import get_settings
 from src.exceptions import RAGPlatformError
 from src.logging_config import get_logger, setup_logging
@@ -65,6 +66,9 @@ def create_app() -> FastAPI:
     app.add_api_route("/health", health_check, methods=["GET"], tags=["Health"])
     app.add_api_route("/health/ready", readiness_check, methods=["GET"], tags=["Health"])
     app.add_api_route("/health/live", liveness_check, methods=["GET"], tags=["Health"])
+
+    # Include RAG API router
+    app.include_router(rag_router)
 
     return app
 
