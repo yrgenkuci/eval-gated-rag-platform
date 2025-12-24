@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: rag-platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Eval-Gated RAG Platform project
+  
+  # Source repositories
+  sourceRepos:
+    - https://github.com/yrgenkuci/eval-gated-rag-platform.git
+  
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: rag-platform
+      server: https://kubernetes.default.svc
+    - namespace: rag-platform-staging
+      server: https://kubernetes.default.svc
+  
+  # Allowed cluster resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+  
+  # Allowed namespace resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: apps
+      kind: '*'
+    - group: batch
+      kind: '*'
+    - group: networking.k8s.io
+      kind: '*'
+  
+  # Roles for team access
+  roles:
+    - name: developer
+      description: Developer access to RAG platform
+      policies:
+        - p, proj:rag-platform:developer, applications, get, rag-platform/*, allow
+        - p, proj:rag-platform:developer, applications, sync, rag-platform/*, allow
+      groups:
+        - rag-developers
+    
+    - name: admin
+      description: Admin access to RAG platform
+      policies:
+        - p, proj:rag-platform:admin, applications, *, rag-platform/*, allow
+      groups:
+        - rag-admins
+

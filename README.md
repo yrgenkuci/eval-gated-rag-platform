@@ -43,8 +43,9 @@ Production-ready RAG (Retrieval-Augmented Generation) system with evaluation-dri
 | LLM (dev) | Ollama | Local inference |
 | LLM (prod) | vLLM | GPU inference |
 | Evaluation | ROUGE, BLEU, Semantic | Quality metrics |
-| CI/CD | GitHub Actions | Automated testing |
-| Orchestration | Kubernetes + Helm | Deployment |
+| CI | GitHub Actions | Testing + eval gate |
+| CD | ArgoCD | GitOps deployment |
+| Orchestration | Kubernetes + Helm | Infrastructure |
 | Observability | Prometheus + Grafana | Monitoring |
 
 ## Quick Start
@@ -154,6 +155,61 @@ env:
   EVAL_THRESHOLD: "0.85"  # 85% pass rate required
   EVAL_GOLD_SET: "data/gold/test.json"
 ```
+
+### ArgoCD GitOps
+
+ArgoCD provides continuous delivery with automatic sync from Git:
+
+```
+GitHub Actions (CI)          ArgoCD (CD)
+      │                           │
+      ▼                           ▼
+  Tests pass ──► Merge ──► Detect change ──► Deploy to K8s
+      │                           │
+      ▼                           ▼
+  Eval gate                  Auto-sync
+```
+
+**Install ArgoCD:**
+
+```bash
+# Install ArgoCD in cluster
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Wait for ArgoCD to be ready
+kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+
+# Get initial admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+# Access ArgoCD UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Open https://localhost:8080 (admin / <password from above>)
+```
+
+**Deploy the Application:**
+
+```bash
+# Create the ArgoCD project (optional, for RBAC)
+kubectl apply -f argocd/project.yaml
+
+# Create the ArgoCD application
+kubectl apply -f argocd/application.yaml
+
+# Check sync status
+kubectl get applications -n argocd
+```
+
+**ArgoCD Features:**
+
+| Feature | Description |
+|---------|-------------|
+| Auto-sync | Deploys on every Git push to main |
+| Self-heal | Reverts manual cluster changes |
+| Prune | Removes deleted resources |
+| Rollback | One-click rollback to previous revision |
+| Health checks | Monitors deployment health |
 
 ## Kubernetes Deployment
 
@@ -277,6 +333,7 @@ eval-gated-rag-platform/
 ├── tests/              # Unit and integration tests
 ├── scripts/            # CLI tools
 ├── helm/               # Kubernetes Helm charts
+├── argocd/             # ArgoCD GitOps manifests
 ├── data/gold/          # Evaluation gold-sets
 └── .github/workflows/  # CI/CD pipelines
 ```
