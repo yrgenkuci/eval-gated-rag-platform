@@ -1,0 +1,15 @@
+apiVersion: v2
+name: eval-gated-rag
+description: Eval-Gated RAG Platform - Production-ready RAG with evaluation-driven CI/CD
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - rag
+  - llm
+  - evaluation
+  - vector-database
+maintainers:
+  - name: Yrgen Kuci
+    url: https://yrgenkuci.com
+

@@ -1,0 +1,211 @@
+# Default values for eval-gated-rag
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  # Environment: development, staging, production
+  environment: development
+
+# RAG API Service
+ragApi:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: eval-gated-rag
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Environment variables
+  env:
+    LOG_LEVEL: "INFO"
+    DEBUG: "false"
+    # LLM settings (pointing to vLLM or Ollama service)
+    LLM_BASE_URL: "http://{{ .Release.Name }}-vllm:8000/v1"
+    LLM_MODEL: "llama3:8b"
+    LLM_TIMEOUT: "120"
+    # Embedding settings
+    EMBEDDING_BASE_URL: "http://{{ .Release.Name }}-embedding:8080/v1"
+    EMBEDDING_MODEL: "BAAI/bge-large-en-v1.5"
+    # Qdrant settings
+    QDRANT_HOST: "{{ .Release.Name }}-qdrant"
+    QDRANT_PORT: "6333"
+    QDRANT_COLLECTION: "documents"
+
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  # Autoscaling
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# Qdrant Vector Database
+qdrant:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: qdrant/qdrant
+    tag: "v1.7.4"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    httpPort: 6333
+    grpcPort: 6334
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+# vLLM Service (GPU-accelerated LLM inference)
+vllm:
+  enabled: false  # Disabled by default, enable for GPU deployments
+  replicaCount: 1
+
+  image:
+    repository: vllm/vllm-openai
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  model: "meta-llama/Llama-3-8B-Instruct"
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 8Gi
+      nvidia.com/gpu: 1
+    limits:
+      cpu: 4000m
+      memory: 32Gi
+      nvidia.com/gpu: 1
+
+  # GPU node selector
+  nodeSelector:
+    accelerator: nvidia-gpu
+
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# Ollama Service (CPU-based LLM for development)
+ollama:
+  enabled: true  # Enabled by default for development
+  replicaCount: 1
+
+  image:
+    repository: ollama/ollama
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  model: "llama3:8b"
+
+  service:
+    type: ClusterIP
+    port: 11434
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+
+# Embedding Service
+embedding:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/huggingface/text-embeddings-inference
+    tag: "cpu-1.2"
+    pullPolicy: IfNotPresent
+
+  model: "BAAI/bge-large-en-v1.5"
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: rag.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Service Account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+
+# Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+

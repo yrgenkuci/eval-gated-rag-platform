@@ -1,0 +1,84 @@
+{{- if .Values.ragApi.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-api
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.ragApi.autoscaling.enabled }}
+  replicas: {{ .Values.ragApi.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "eval-gated-rag.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "eval-gated-rag.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: {{ include "eval-gated-rag.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.ragApi.image.repository }}:{{ .Values.ragApi.image.tag }}"
+          imagePullPolicy: {{ .Values.ragApi.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.global.environment | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.ragApi.env.LOG_LEVEL | quote }}
+            - name: DEBUG
+              value: {{ .Values.ragApi.env.DEBUG | quote }}
+            - name: LLM_BASE_URL
+              value: {{ tpl .Values.ragApi.env.LLM_BASE_URL . | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.ragApi.env.LLM_MODEL | quote }}
+            - name: LLM_TIMEOUT
+              value: {{ .Values.ragApi.env.LLM_TIMEOUT | quote }}
+            - name: EMBEDDING_BASE_URL
+              value: {{ tpl .Values.ragApi.env.EMBEDDING_BASE_URL . | quote }}
+            - name: EMBEDDING_MODEL
+              value: {{ .Values.ragApi.env.EMBEDDING_MODEL | quote }}
+            - name: QDRANT_HOST
+              value: {{ tpl .Values.ragApi.env.QDRANT_HOST . | quote }}
+            - name: QDRANT_PORT
+              value: {{ .Values.ragApi.env.QDRANT_PORT | quote }}
+            - name: QDRANT_COLLECTION
+              value: {{ .Values.ragApi.env.QDRANT_COLLECTION | quote }}
+          livenessProbe:
+            {{- toYaml .Values.ragApi.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ragApi.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ragApi.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-api
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.ragApi.service.type }}
+  ports:
+    - port: {{ .Values.ragApi.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "eval-gated-rag.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+{{- end }}
+
