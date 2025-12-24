@@ -15,6 +15,7 @@ pydantic = "^2.10.0"
 pydantic-settings = "^2.6.0"
 httpx = "^0.28.0"
 qdrant-client = "^1.16.2"
+prometheus-client = "^0.23.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"

@@ -182,6 +182,63 @@ embedding:
       cpu: 2000m
       memory: 4Gi
 
+# Grafana Dashboards
+grafana:
+  enabled: true
+  
+  image:
+    repository: grafana/grafana
+    tag: "10.2.2"
+    pullPolicy: IfNotPresent
+  
+  adminUser: admin
+  adminPassword: admin  # Change in production
+  
+  service:
+    type: ClusterIP
+    port: 3000
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+
+# Prometheus Monitoring
+prometheus:
+  enabled: true
+  
+  image:
+    repository: prom/prometheus
+    tag: "v2.48.0"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 9090
+  
+  retention: "15d"
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
 # Ingress configuration
 ingress:
   enabled: false

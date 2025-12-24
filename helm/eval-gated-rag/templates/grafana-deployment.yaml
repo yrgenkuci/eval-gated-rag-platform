@@ -1,0 +1,171 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana-datasources
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://{{ include "eval-gated-rag.fullname" . }}-prometheus:{{ .Values.prometheus.service.port }}
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana-dashboards-provider
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "eval-gated-rag.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: grafana
+  template:
+    metadata:
+      labels:
+        {{- include "eval-gated-rag.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: {{ .Values.grafana.adminUser | quote }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eval-gated-rag.fullname" . }}-grafana
+                  key: admin-password
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+          resources:
+            {{- toYaml .Values.grafana.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: datasources
+          configMap:
+            name: {{ include "eval-gated-rag.fullname" . }}-grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: {{ include "eval-gated-rag.fullname" . }}-grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: {{ include "eval-gated-rag.fullname" . }}-grafana-dashboards
+            optional: true
+        {{- if .Values.grafana.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "eval-gated-rag.fullname" . }}-grafana
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  type: {{ .Values.grafana.service.type }}
+  ports:
+    - port: {{ .Values.grafana.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "eval-gated-rag.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+type: Opaque
+data:
+  admin-password: {{ .Values.grafana.adminPassword | b64enc | quote }}
+{{- if .Values.grafana.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "eval-gated-rag.fullname" . }}-grafana
+  labels:
+    {{- include "eval-gated-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.grafana.persistence.storageClass }}
+  storageClassName: {{ .Values.grafana.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.grafana.persistence.size }}
+{{- end }}
+{{- end }}
+

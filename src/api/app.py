@@ -9,13 +9,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from src import __version__
 from src.api.routes import router as rag_router
 from src.config import get_settings
 from src.exceptions import RAGPlatformError
 from src.logging_config import get_logger, setup_logging
+from src.observability.metrics import (
+    MetricsMiddleware,
+    get_metrics,
+    get_metrics_content_type,
+)
 
 logger = get_logger(__name__)
 
@@ -62,10 +67,14 @@ def create_app() -> FastAPI:
     # Register exception handlers
     app.add_exception_handler(RAGPlatformError, rag_exception_handler)
 
+    # Add metrics middleware
+    app.add_middleware(MetricsMiddleware)
+
     # Register routes
     app.add_api_route("/health", health_check, methods=["GET"], tags=["Health"])
     app.add_api_route("/health/ready", readiness_check, methods=["GET"], tags=["Health"])
     app.add_api_route("/health/live", liveness_check, methods=["GET"], tags=["Health"])
+    app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], tags=["Observability"])
 
     # Include RAG API router
     app.include_router(rag_router)
@@ -178,6 +187,18 @@ async def liveness_check() -> dict[str, str]:
         Liveness status.
     """
     return {"status": "alive"}
+
+
+async def metrics_endpoint() -> Response:
+    """Prometheus metrics endpoint.
+
+    Returns:
+        Prometheus-formatted metrics.
+    """
+    return Response(
+        content=get_metrics(),
+        media_type=get_metrics_content_type(),
+    )
 
 
 # Create the application instance
